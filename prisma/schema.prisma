@@ -1,0 +1,552 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum AuthProvider {
+  PASSWORD
+  GOOGLE
+}
+
+enum RepositoryProvider {
+  GITHUB
+  BITBUCKET
+  ZIP
+}
+
+enum RepositoryConnectionStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum CodeLanguage {
+  TYPESCRIPT
+  JAVASCRIPT
+  UNKNOWN
+}
+
+enum CodeSymbolKind {
+  CLASS
+  FUNCTION
+  METHOD
+  INTERFACE
+  TYPE
+  IMPORT
+  EXPORT
+  DECORATOR
+  VARIABLE
+}
+
+enum CodeDependencyKind {
+  IMPORT
+  EXPORT
+  CLASS_EXTENDS
+  METHOD_CALL
+}
+
+enum ApiFramework {
+  NESTJS
+  EXPRESS
+}
+
+enum ApiHttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+enum ApiChangeType {
+  ADDED
+  REMOVED
+  MODIFIED
+  DEPRECATED
+}
+
+enum ApiChangeSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  email                 String                 @unique @db.VarChar(320)
+  name                  String                 @db.VarChar(160)
+  avatar                String?                @db.Text
+  passwordHash          String?                @map("password_hash") @db.Text
+  status                UserStatus             @default(ACTIVE)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  authAccounts          AuthAccount[]
+  refreshTokens         RefreshToken[]
+  userRoles             UserRole[]
+  organizationMembers   OrganizationMember[]
+  teamMembers           TeamMember[]
+  repositoryConnections RepositoryConnection[]
+  repositories          Repository[]
+  aiConversations       AiConversation[]
+
+  @@map("users")
+}
+
+model AuthAccount {
+  id         String       @id @default(uuid()) @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  provider   AuthProvider
+  providerId String       @map("provider_id") @db.VarChar(320)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model RefreshToken {
+  id                String         @id @default(uuid()) @db.Uuid
+  jti               String         @unique @db.Uuid
+  userId            String         @map("user_id") @db.Uuid
+  tokenHash         String         @unique @map("token_hash") @db.Char(64)
+  familyId          String         @map("family_id") @db.Uuid
+  expiresAt         DateTime       @map("expires_at")
+  revokedAt         DateTime?      @map("revoked_at")
+  replacedByTokenId String?        @unique @map("replaced_by_token_id") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedByToken   RefreshToken?  @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id])
+  replacesTokens    RefreshToken[] @relation("RefreshTokenRotation")
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique @db.VarChar(80)
+  description String?          @db.Text
+  isSystem    Boolean          @default(true) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  action      String           @unique @db.VarChar(120)
+  description String?          @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  roleId         String        @map("role_id") @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([organizationId])
+  @@map("user_roles")
+}
+
+model Organization {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String                 @db.VarChar(160)
+  slug                  String                 @unique @db.VarChar(120)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  teams                 Team[]
+  members               OrganizationMember[]
+  userRoles             UserRole[]
+  repositoryConnections RepositoryConnection[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+model Team {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String       @db.VarChar(160)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        TeamMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model RepositoryConnection {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  userId                String                     @map("user_id") @db.Uuid
+  organizationId        String?                    @map("organization_id") @db.Uuid
+  provider              RepositoryProvider
+  providerUserId        String                     @map("provider_user_id") @db.VarChar(320)
+  username              String?                    @db.VarChar(160)
+  displayName           String?                    @map("display_name") @db.VarChar(160)
+  encryptedAccessToken  String?                    @map("encrypted_access_token") @db.Text
+  encryptedRefreshToken String?                    @map("encrypted_refresh_token") @db.Text
+  scopes                String[]                   @default([])
+  expiresAt             DateTime?                  @map("expires_at")
+  lastValidatedAt       DateTime?                  @map("last_validated_at")
+  status                RepositoryConnectionStatus @default(ACTIVE)
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  updatedAt             DateTime                   @updatedAt @map("updated_at")
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization?              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositories          Repository[]
+
+  @@unique([provider, providerUserId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("repository_connections")
+}
+
+model Repository {
+  id               String               @id @default(uuid()) @db.Uuid
+  ownerId          String               @map("owner_id") @db.Uuid
+  connectionId     String               @map("connection_id") @db.Uuid
+  provider         RepositoryProvider
+  externalId       String               @map("external_id") @db.VarChar(320)
+  name             String               @db.VarChar(240)
+  fullName         String               @map("full_name") @db.VarChar(512)
+  url              String               @db.Text
+  defaultBranch    String?              @map("default_branch") @db.VarChar(160)
+  visibility       String?              @db.VarChar(80)
+  language         String?              @db.VarChar(120)
+  sourcePath       String?              @map("source_path") @db.Text
+  archivePath      String?              @map("archive_path") @db.Text
+  uploadSizeBytes  Int?                 @map("upload_size_bytes")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  owner            User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  connection       RepositoryConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  scanJobs         ScanJob[]
+  codeFiles        CodeFile[]
+  codeSymbols      CodeSymbol[]
+  codeDependencies CodeDependency[]
+  detectedApis     DetectedApi[]
+  apiDocumentation ApiDocumentation[]
+  apiSnapshots     ApiSnapshot[]
+  apiChanges       ApiChange[]
+  aiConversations  AiConversation[]
+
+  @@unique([ownerId, provider, externalId])
+  @@index([connectionId])
+  @@index([ownerId])
+  @@map("repositories")
+}
+
+model ScanJob {
+  id               String             @id @default(uuid()) @db.Uuid
+  repositoryId     String             @map("repository_id") @db.Uuid
+  status           ScanStatus         @default(QUEUED)
+  progress         Int                @default(0)
+  startedAt        DateTime?          @map("started_at")
+  finishedAt       DateTime?          @map("finished_at")
+  errorMessage     String?            @map("error_message") @db.Text
+  metadata         Json?
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  repository       Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  codeFiles        CodeFile[]
+  codeSymbols      CodeSymbol[]
+  codeDependencies CodeDependency[]
+  detectedApis     DetectedApi[]
+  apiDocumentation ApiDocumentation[]
+  apiSnapshots     ApiSnapshot[]
+  apiChanges       ApiChange[]
+
+  @@index([repositoryId])
+  @@index([repositoryId, status, createdAt])
+  @@index([status])
+  @@index([createdAt])
+  @@map("scan_jobs")
+}
+
+model CodeFile {
+  id                   String           @id @default(uuid()) @db.Uuid
+  repositoryId         String           @map("repository_id") @db.Uuid
+  scanId               String           @map("scan_id") @db.Uuid
+  path                 String           @db.VarChar(1024)
+  language             CodeLanguage
+  sizeBytes            Int              @map("size_bytes")
+  hash                 String           @db.Char(64)
+  lineCount            Int              @map("line_count")
+  parseStatus          String           @map("parse_status") @db.VarChar(40)
+  parseError           String?          @map("parse_error") @db.Text
+  metadata             Json?
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  repository           Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan                 ScanJob          @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  symbols              CodeSymbol[]
+  outgoingDependencies CodeDependency[] @relation("SourceCodeFile")
+  incomingDependencies CodeDependency[] @relation("TargetCodeFile")
+
+  @@unique([scanId, path])
+  @@index([repositoryId])
+  @@index([scanId])
+  @@index([language])
+  @@map("code_files")
+}
+
+model CodeSymbol {
+  id            String         @id @default(uuid()) @db.Uuid
+  repositoryId  String         @map("repository_id") @db.Uuid
+  scanId        String         @map("scan_id") @db.Uuid
+  codeFileId    String         @map("code_file_id") @db.Uuid
+  kind          CodeSymbolKind
+  name          String         @db.VarChar(320)
+  qualifiedName String?        @map("qualified_name") @db.VarChar(640)
+  startLine     Int?           @map("start_line")
+  endLine       Int?           @map("end_line")
+  metadata      Json?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  repository    Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan          ScanJob        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  codeFile      CodeFile       @relation(fields: [codeFileId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([scanId])
+  @@index([codeFileId])
+  @@index([kind])
+  @@map("code_symbols")
+}
+
+model CodeDependency {
+  id           String             @id @default(uuid()) @db.Uuid
+  repositoryId String             @map("repository_id") @db.Uuid
+  scanId       String             @map("scan_id") @db.Uuid
+  sourceFileId String             @map("source_file_id") @db.Uuid
+  targetFileId String?            @map("target_file_id") @db.Uuid
+  sourcePath   String             @map("source_path") @db.VarChar(1024)
+  targetPath   String?            @map("target_path") @db.VarChar(1024)
+  kind         CodeDependencyKind
+  specifier    String             @db.VarChar(1024)
+  metadata     Json?
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  repository   Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan         ScanJob            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  sourceFile   CodeFile           @relation("SourceCodeFile", fields: [sourceFileId], references: [id], onDelete: Cascade)
+  targetFile   CodeFile?          @relation("TargetCodeFile", fields: [targetFileId], references: [id], onDelete: SetNull)
+
+  @@index([repositoryId])
+  @@index([repositoryId, scanId, sourcePath])
+  @@index([repositoryId, scanId, targetPath])
+  @@index([scanId])
+  @@index([sourceFileId])
+  @@index([targetFileId])
+  @@index([kind])
+  @@map("code_dependencies")
+}
+
+model DetectedApi {
+  id               String            @id @default(uuid()) @db.Uuid
+  repositoryId     String            @map("repository_id") @db.Uuid
+  scanId           String            @map("scan_id") @db.Uuid
+  method           ApiHttpMethod
+  path             String            @db.VarChar(1024)
+  framework        ApiFramework
+  controllerName   String?           @map("controller_name") @db.VarChar(320)
+  handlerName      String?           @map("handler_name") @db.VarChar(320)
+  filePath         String            @map("file_path") @db.VarChar(1024)
+  lineNumber       Int               @map("line_number")
+  requestSchema    Json?             @map("request_schema")
+  responseSchema   Json?             @map("response_schema")
+  authMetadata     Json?             @map("auth_metadata")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  repository       Repository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan             ScanJob           @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  apiDocumentation ApiDocumentation?
+  snapshots        ApiSnapshot[]
+  changes          ApiChange[]
+
+  @@index([repositoryId])
+  @@index([repositoryId, path])
+  @@index([scanId])
+  @@index([method])
+  @@index([framework])
+  @@map("detected_apis")
+}
+
+model ApiDocumentation {
+  apiId        String      @id @map("api_id") @db.Uuid
+  repositoryId String      @map("repository_id") @db.Uuid
+  scanId       String      @map("scan_id") @db.Uuid
+  openApiJson  Json        @map("open_api_json")
+  markdown     String      @db.Text
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  api          DetectedApi @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan         ScanJob     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([scanId])
+  @@map("api_documentation")
+}
+
+model ApiSnapshot {
+  id            String      @id @default(uuid()) @db.Uuid
+  apiId         String      @map("api_id") @db.Uuid
+  repositoryId  String      @map("repository_id") @db.Uuid
+  scanId        String      @map("scan_id") @db.Uuid
+  version       Int
+  contractHash  String      @map("contract_hash") @db.Char(64)
+  schemaJson    Json        @map("schema_json")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  api           DetectedApi @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  repository    Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan          ScanJob     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  oldApiChanges ApiChange[] @relation("OldApiSnapshot")
+  newApiChanges ApiChange[] @relation("NewApiSnapshot")
+
+  @@unique([apiId, scanId])
+  @@index([repositoryId])
+  @@index([scanId])
+  @@index([contractHash])
+  @@map("api_snapshots")
+}
+
+model ApiChange {
+  id            String            @id @default(uuid()) @db.Uuid
+  repositoryId  String            @map("repository_id") @db.Uuid
+  scanId        String            @map("scan_id") @db.Uuid
+  apiId         String            @map("api_id") @db.Uuid
+  oldSnapshotId String?           @map("old_snapshot_id") @db.Uuid
+  newSnapshotId String?           @map("new_snapshot_id") @db.Uuid
+  changeType    ApiChangeType     @map("change_type")
+  severity      ApiChangeSeverity
+  description   String            @db.Text
+  metadata      Json?
+  createdAt     DateTime          @default(now()) @map("created_at")
+  repository    Repository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  scan          ScanJob           @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  api           DetectedApi       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  oldSnapshot   ApiSnapshot?      @relation("OldApiSnapshot", fields: [oldSnapshotId], references: [id], onDelete: SetNull)
+  newSnapshot   ApiSnapshot?      @relation("NewApiSnapshot", fields: [newSnapshotId], references: [id], onDelete: SetNull)
+
+  @@index([repositoryId])
+  @@index([scanId])
+  @@index([apiId])
+  @@index([oldSnapshotId])
+  @@index([newSnapshotId])
+  @@index([changeType])
+  @@index([severity])
+  @@map("api_changes")
+}
+
+model AiConversation {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @map("user_id") @db.Uuid
+  repositoryId String      @map("repository_id") @db.Uuid
+  title        String      @db.VarChar(180)
+  model        String      @db.VarChar(160)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  messages     AiMessage[]
+
+  @@index([userId])
+  @@index([repositoryId])
+  @@index([updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(uuid()) @db.Uuid
+  conversationId String         @map("conversation_id") @db.Uuid
+  role           AiMessageRole
+  content        String         @db.Text
+  metadata       Json?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([role])
+  @@map("ai_messages")
+}
