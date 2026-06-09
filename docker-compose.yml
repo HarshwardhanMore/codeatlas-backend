@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: codeatlas
+      POSTGRES_USER: codeatlas
+      POSTGRES_PASSWORD: codeatlas_local
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U codeatlas -d codeatlas']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  codeatlas-backend-migrations:
+    build:
+      context: .
+    command: ['npm', 'run', 'prisma:deploy']
+    env_file:
+      - ./.env.example
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://codeatlas:codeatlas_local@postgres:5432/codeatlas
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  codeatlas-backend:
+    build:
+      context: .
+    env_file:
+      - ./.env.example
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://codeatlas:codeatlas_local@postgres:5432/codeatlas
+      REDIS_URL: redis://redis:6379
+      FRONTEND_ORIGIN: http://localhost:3000
+      JWT_ACCESS_SECRET: replace-with-local-access-token-secret
+      JWT_REFRESH_SECRET: replace-with-local-refresh-token-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      GOOGLE_CLIENT_ID: replace-with-google-client-id
+      GOOGLE_CLIENT_SECRET: replace-with-google-client-secret
+      GOOGLE_CALLBACK_URL: http://localhost:3001/api/v1/auth/google/callback
+      GITHUB_CALLBACK_URL: http://localhost:3001/api/v1/integrations/github/callback
+      BITBUCKET_CALLBACK_URL: http://localhost:3001/api/v1/integrations/bitbucket/callback
+      OAUTH_PROVIDER_TIMEOUT_MS: 15000
+      OAUTH_ENCRYPTION_KEY: replace-with-32-character-oauth-key
+      REPOSITORY_STORAGE_PATH: storage/repositories
+      MAX_ZIP_UPLOAD_BYTES: 52428800
+      SCANNER_WORKSPACE_PATH: storage/scanner-workspaces
+      SCANNER_MATERIALIZATION_PATH: storage/scanner-materializations
+      SCANNER_GIT_CLONE_TIMEOUT_MS: 120000
+      SCAN_JOB_ATTEMPTS: 3
+      SCAN_JOB_TIMEOUT_MS: 300000
+      SCAN_PROGRESS_TTL_SECONDS: 604800
+      SCANNER_MAX_FILES: 10000
+      SCANNER_MAX_FILE_BYTES: 1048576
+      SCANNER_MAX_WORKSPACE_BYTES: 262144000
+      OPENROUTER_MODEL: openai/gpt-5.2
+      AI_MAX_CONTEXT_TOKENS: 12000
+      AI_PROVIDER_TIMEOUT_MS: 30000
+      AI_RATE_LIMIT_PER_MINUTE: 20
+    ports:
+      - '3001:3001'
+    depends_on:
+      codeatlas-backend-migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

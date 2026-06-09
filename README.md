@@ -20,7 +20,7 @@ This repository owns the backend application only. It includes:
 - Repository materialization, scanner lifecycle, code intelligence, API discovery, OpenAPI generation, API versioning, and change detection.
 - Dashboard metrics, dependency graph APIs, and OpenRouter-backed assistant APIs.
 
-The Next.js UI is maintained separately in `../codeatlas-frontend`.
+The Next.js UI is maintained separately in the `codeatlas-frontend` repository.
 
 ## Tech Stack
 
@@ -95,7 +95,7 @@ test/            Shared test utilities.
 - PostgreSQL
 - Redis
 - Git
-- Docker, optional but recommended for local PostgreSQL and Redis
+- Docker, optional but recommended for local PostgreSQL, Redis, and backend service orchestration
 
 Use the project Node version:
 
@@ -137,6 +137,14 @@ npm run prisma:migrate
 ```
 
 Use `npm run prisma:deploy` instead of `npm run prisma:migrate` when applying existing migrations in deployed environments.
+
+Docker local stack:
+
+```bash
+docker compose up --build
+```
+
+The backend Compose file starts PostgreSQL, Redis, a Prisma migration job, and the backend API. It does not start the frontend.
 
 ## Run
 

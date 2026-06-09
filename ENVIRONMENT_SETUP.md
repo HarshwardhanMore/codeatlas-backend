@@ -37,7 +37,6 @@ nvm use
 Create a backend environment file from the checked-in template:
 
 ```bash
-cd /home/harsh/Documents/Personal/codeatlas/codeatlas-backend
 cp .env.example .env
 ```
 
@@ -55,10 +54,9 @@ CodeAtlas uses PostgreSQL through Prisma. The backend requires `DATABASE_URL`.
 
 ### Option A: Docker PostgreSQL
 
-From the project root:
+From this backend repository:
 
 ```bash
-cd /home/harsh/Documents/Personal/codeatlas
 docker compose up -d postgres
 ```
 
@@ -138,10 +136,9 @@ CodeAtlas requires Redis for:
 - Google OAuth state storage.
 - GitHub and Bitbucket OAuth nonce/state storage.
 
-Start Redis through Docker Compose:
+Start Redis through this repository's Docker Compose file:
 
 ```bash
-cd /home/harsh/Documents/Personal/codeatlas
 docker compose up -d redis
 ```
 
@@ -621,7 +618,7 @@ npm run build
 npm run start
 ```
 
-For Docker Compose, the root `codeatlas-backend-migrations` service runs `npm run prisma:deploy` before the backend service starts.
+For Docker Compose, the `codeatlas-backend-migrations` service runs `npm run prisma:deploy` before the backend service starts.
 
 ## Environment Variable Coverage
 
